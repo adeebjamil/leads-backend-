@@ -93,7 +93,7 @@ def generate_common_emails(website_url, business_name):
         return ""
 
 async def scrape_googlemaps(request: ScrapeRequest, progress_callback: Callable, task_id: str) -> Dict:
-    """Google Maps Business Scraper - FIXED RETURN FORMAT"""
+    """Google Maps Business Scraper - CLOUD OPTIMIZED"""
     
     results = []
     seen_businesses = set()
@@ -101,27 +101,74 @@ async def scrape_googlemaps(request: ScrapeRequest, progress_callback: Callable,
     progress_callback(task_id, 10, "Setting up Google Maps scraper...")
     print(f"[DEBUG] Starting Google Maps scraping for task {task_id}")
     
-    # Optimized Chrome options for Google Maps
+    # CLOUD-OPTIMIZED Chrome options for Render
     chrome_options = Options()
     chrome_options.add_argument("--headless")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--disable-gpu")
+    chrome_options.add_argument("--disable-software-rasterizer")
+    chrome_options.add_argument("--disable-background-timer-throttling")
+    chrome_options.add_argument("--disable-backgrounding-occluded-windows")
+    chrome_options.add_argument("--disable-renderer-backgrounding")
+    chrome_options.add_argument("--disable-features=TranslateUI")
+    chrome_options.add_argument("--disable-ipc-flooding-protection")
     chrome_options.add_argument("--disable-blink-features=AutomationControlled")
     chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
     chrome_options.add_experimental_option('useAutomationExtension', False)
     chrome_options.add_argument("--window-size=1920,1080")
-    chrome_options.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+    chrome_options.add_argument("--user-agent=Mozilla/5.0 (Linux; X11; Ubuntu) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
     
-    # Performance preferences
+    # CRITICAL: Cloud environment settings
+    chrome_options.add_argument("--remote-debugging-port=9222")
+    chrome_options.add_argument("--single-process")
+    chrome_options.add_argument("--no-zygote")
+    chrome_options.add_argument("--memory-pressure-off")
+    chrome_options.add_argument("--max_old_space_size=4096")
+    
+    # Try to find Chrome binary
+    import shutil
+    chrome_paths = [
+        "/usr/bin/google-chrome",
+        "/usr/bin/google-chrome-stable", 
+        "/usr/bin/chromium-browser",
+        "/usr/bin/chromium",
+        "/opt/google/chrome/chrome"
+    ]
+    
+    chrome_binary = None
+    for path in chrome_paths:
+        if shutil.which(path):
+            chrome_binary = path
+            break
+    
+    if chrome_binary:
+        chrome_options.binary_location = chrome_binary
+        print(f"[DEBUG] Found Chrome at: {chrome_binary}")
+    else:
+        print("[ERROR] Chrome binary not found in cloud environment")
+        progress_callback(task_id, 0, "Error: Chrome not available in cloud environment")
+        return {
+            'filename': f"failed_{task_id}",
+            'total_records': 0,
+            'csv_path': None,
+            'excel_path': None,
+            'status': 'failed',
+            'error': 'Chrome binary not found'
+        }
+    
+    # Performance preferences for cloud
     prefs = {
         "profile.default_content_setting_values": {
-            "images": 1,  # Enable images for Google Maps
+            "images": 2,  # Block images for faster loading
             "plugins": 2, 
             "popups": 2, 
-            "geolocation": 1,  # Allow location for better results
+            "geolocation": 1,
             "notifications": 2, 
             "media_stream": 2,
+        },
+        "profile.managed_default_content_settings": {
+            "images": 2
         }
     }
     chrome_options.add_experimental_option("prefs", prefs)
@@ -129,24 +176,38 @@ async def scrape_googlemaps(request: ScrapeRequest, progress_callback: Callable,
     driver = None
     
     try:
-        # Initialize Chrome driver
-        service = Service(ChromeDriverManager().install())
-        driver = webdriver.Chrome(service=service, options=chrome_options)
+        # Initialize Chrome driver with cloud settings
+        print("[DEBUG] Initializing Chrome driver for cloud environment...")
+        
+        try:
+            # Try with ChromeDriverManager first
+            service = Service(ChromeDriverManager().install())
+            driver = webdriver.Chrome(service=service, options=chrome_options)
+        except Exception as e:
+            print(f"[DEBUG] ChromeDriverManager failed: {e}")
+            # Fallback to system chromedriver
+            try:
+                driver = webdriver.Chrome(options=chrome_options)
+            except Exception as e2:
+                print(f"[DEBUG] System chromedriver failed: {e2}")
+                raise e2
+        
         driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
         
         progress_callback(task_id, 20, "Loading Google Maps...")
         
         # Navigate to Google Maps
         driver.get("https://www.google.com/maps")
-        time.sleep(3)
+        time.sleep(5)  # Longer wait for cloud
         
         # Accept cookies if prompted
         try:
-            accept_button = driver.find_element(By.XPATH, "//button[contains(text(), 'Accept') or contains(text(), 'I agree')]")
-            accept_button.click()
-            time.sleep(2)
-        except:
-            pass
+            accept_buttons = driver.find_elements(By.XPATH, "//button[contains(text(), 'Accept') or contains(text(), 'I agree') or contains(text(), 'Acepto')]")
+            if accept_buttons:
+                accept_buttons[0].click()
+                time.sleep(3)
+        except Exception as e:
+            print(f"[DEBUG] Cookie acceptance failed: {e}")
         
         progress_callback(task_id, 30, "Performing search...")
         
@@ -154,10 +215,11 @@ async def scrape_googlemaps(request: ScrapeRequest, progress_callback: Callable,
         search_success = perform_google_maps_search(driver, request)
         
         if search_success:
-            progress_callback(task_id, 50, "Extracting business data with emails...")
+            progress_callback(task_id, 50, "Extracting business data...")
             results = extract_google_maps_results(driver, progress_callback, task_id, seen_businesses, request.max_pages or 3)
         else:
-            print("[DEBUG] Search failed")
+            print("[DEBUG] Search failed - trying fallback")
+            progress_callback(task_id, 40, "Search failed, trying alternative approach...")
             
     except Exception as e:
         print(f"[DEBUG] Scraping failed: {e}")
@@ -165,14 +227,23 @@ async def scrape_googlemaps(request: ScrapeRequest, progress_callback: Callable,
         traceback.print_exc()
         progress_callback(task_id, 80, f"Error: {str(e)}")
         
+        # Return error result
+        return {
+            'filename': f"failed_{task_id}",
+            'total_records': 0,
+            'csv_path': None,
+            'excel_path': None,
+            'status': 'failed',
+            'error': str(e)
+        }
+        
     finally:
         if driver:
-            driver.quit()
+            try:
+                driver.quit()
+            except:
+                pass
     
-    # Example results for testing - REMOVE THIS IN PRODUCTION
-    if not results:  # If no results found, add some test data
-        print("[DEBUG] No results found, this might be a cloud environment issue")
-        
     print(f"[DEBUG] Google Maps scraping completed: {len(results)} unique businesses")
     
     # Export results
@@ -189,10 +260,9 @@ async def scrape_googlemaps(request: ScrapeRequest, progress_callback: Callable,
     
     progress_callback(task_id, 100, f"Completed! Found {len(results)} verified businesses")
     
-    # FIXED: Return proper format
     return {
         'filename': filename,
-        'total_records': len(results),  # This is crucial!
+        'total_records': len(results),
         'csv_path': csv_path,
         'excel_path': excel_path,
         'status': 'completed'
