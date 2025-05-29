@@ -93,7 +93,7 @@ def generate_common_emails(website_url, business_name):
         return ""
 
 async def scrape_googlemaps(request: ScrapeRequest, progress_callback: Callable, task_id: str) -> Dict:
-    """Google Maps Business Scraper - CLOUD OPTIMIZED"""
+    """Google Maps Business Scraper - ENHANCED CLOUD VERSION"""
     
     results = []
     seen_businesses = set()
@@ -101,30 +101,29 @@ async def scrape_googlemaps(request: ScrapeRequest, progress_callback: Callable,
     progress_callback(task_id, 10, "Setting up Google Maps scraper...")
     print(f"[DEBUG] Starting Google Maps scraping for task {task_id}")
     
-    # CLOUD-OPTIMIZED Chrome options for Render
+    # ENHANCED Chrome options with better anti-detection
     chrome_options = Options()
-    chrome_options.add_argument("--headless")
+    chrome_options.add_argument("--headless=new")  # Use new headless mode
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--disable-gpu")
     chrome_options.add_argument("--disable-software-rasterizer")
-    chrome_options.add_argument("--disable-background-timer-throttling")
-    chrome_options.add_argument("--disable-backgrounding-occluded-windows")
-    chrome_options.add_argument("--disable-renderer-backgrounding")
-    chrome_options.add_argument("--disable-features=TranslateUI")
-    chrome_options.add_argument("--disable-ipc-flooding-protection")
+    
+    # CRITICAL: Better anti-detection
     chrome_options.add_argument("--disable-blink-features=AutomationControlled")
     chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
     chrome_options.add_experimental_option('useAutomationExtension', False)
-    chrome_options.add_argument("--window-size=1920,1080")
-    chrome_options.add_argument("--user-agent=Mozilla/5.0 (Linux; X11; Ubuntu) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+    chrome_options.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
     
-    # CRITICAL: Cloud environment settings
-    chrome_options.add_argument("--remote-debugging-port=9222")
-    chrome_options.add_argument("--single-process")
-    chrome_options.add_argument("--no-zygote")
+    # Memory optimization for cloud
     chrome_options.add_argument("--memory-pressure-off")
     chrome_options.add_argument("--max_old_space_size=4096")
+    chrome_options.add_argument("--single-process")
+    chrome_options.add_argument("--no-zygote")
+    
+    # Window settings
+    chrome_options.add_argument("--window-size=1920,1080")
+    chrome_options.add_argument("--start-maximized")
     
     # Try to find Chrome binary
     import shutil
@@ -144,10 +143,10 @@ async def scrape_googlemaps(request: ScrapeRequest, progress_callback: Callable,
     
     if chrome_binary:
         chrome_options.binary_location = chrome_binary
-        print(f"[DEBUG] Found Chrome at: {chrome_binary}")
+        print(f"[DEBUG] ✅ Found Chrome at: {chrome_binary}")
     else:
-        print("[ERROR] Chrome binary not found in cloud environment")
-        progress_callback(task_id, 0, "Error: Chrome not available in cloud environment")
+        print("[ERROR] ❌ Chrome binary not found")
+        progress_callback(task_id, 0, "Error: Chrome not available")
         return {
             'filename': f"failed_{task_id}",
             'total_records': 0,
@@ -157,18 +156,15 @@ async def scrape_googlemaps(request: ScrapeRequest, progress_callback: Callable,
             'error': 'Chrome binary not found'
         }
     
-    # Performance preferences for cloud
+    # Performance preferences
     prefs = {
         "profile.default_content_setting_values": {
-            "images": 2,  # Block images for faster loading
+            "images": 2,  # Block images
             "plugins": 2, 
             "popups": 2, 
             "geolocation": 1,
             "notifications": 2, 
             "media_stream": 2,
-        },
-        "profile.managed_default_content_settings": {
-            "images": 2
         }
     }
     chrome_options.add_experimental_option("prefs", prefs)
@@ -176,58 +172,68 @@ async def scrape_googlemaps(request: ScrapeRequest, progress_callback: Callable,
     driver = None
     
     try:
-        # Initialize Chrome driver with cloud settings
-        print("[DEBUG] Initializing Chrome driver for cloud environment...")
+        progress_callback(task_id, 15, "Initializing browser...")
+        print("[DEBUG] 🚀 Initializing Chrome driver...")
         
         try:
-            # Try with ChromeDriverManager first
             service = Service(ChromeDriverManager().install())
             driver = webdriver.Chrome(service=service, options=chrome_options)
         except Exception as e:
             print(f"[DEBUG] ChromeDriverManager failed: {e}")
-            # Fallback to system chromedriver
-            try:
-                driver = webdriver.Chrome(options=chrome_options)
-            except Exception as e2:
-                print(f"[DEBUG] System chromedriver failed: {e2}")
-                raise e2
+            driver = webdriver.Chrome(options=chrome_options)
         
+        # Enhanced anti-detection
         driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+        driver.execute_script("Object.defineProperty(navigator, 'plugins', {get: () => [1, 2, 3, 4, 5]})")
+        driver.execute_script("Object.defineProperty(navigator, 'languages', {get: () => ['en-US', 'en']})")
         
-        progress_callback(task_id, 20, "Loading Google Maps...")
+        progress_callback(task_id, 25, "Loading Google Maps...")
+        print("[DEBUG] 🗺️ Loading Google Maps...")
         
         # Navigate to Google Maps
         driver.get("https://www.google.com/maps")
-        time.sleep(5)  # Longer wait for cloud
+        time.sleep(8)  # Longer wait
         
-        # Accept cookies if prompted
+        # ENHANCED: Check if page loaded properly
+        page_title = driver.title
+        print(f"[DEBUG] Page title: {page_title}")
+        
+        if "Google Maps" not in page_title:
+            print("[ERROR] ❌ Google Maps did not load properly")
+            progress_callback(task_id, 30, "Error: Could not access Google Maps")
+            raise Exception("Google Maps access blocked")
+        
+        # Accept cookies
         try:
-            accept_buttons = driver.find_elements(By.XPATH, "//button[contains(text(), 'Accept') or contains(text(), 'I agree') or contains(text(), 'Acepto')]")
+            accept_buttons = driver.find_elements(By.XPATH, "//button[contains(text(), 'Accept') or contains(text(), 'I agree') or contains(text(), 'Acepto') or contains(text(), 'Akzeptieren')]")
             if accept_buttons:
                 accept_buttons[0].click()
                 time.sleep(3)
+                print("[DEBUG] ✅ Cookies accepted")
         except Exception as e:
-            print(f"[DEBUG] Cookie acceptance failed: {e}")
+            print(f"[DEBUG] Cookie handling: {e}")
         
-        progress_callback(task_id, 30, "Performing search...")
+        progress_callback(task_id, 35, "Performing search...")
         
-        # Perform search
-        search_success = perform_google_maps_search(driver, request)
+        # Perform search with better error handling
+        search_success = perform_enhanced_search(driver, request, progress_callback, task_id)
         
         if search_success:
             progress_callback(task_id, 50, "Extracting business data...")
-            results = extract_google_maps_results(driver, progress_callback, task_id, seen_businesses, request.max_pages or 3)
+            results = extract_google_maps_results_enhanced(driver, progress_callback, task_id, seen_businesses, request.max_pages or 3)
+            
+            print(f"[DEBUG] 📊 Final results: {len(results)} businesses found")
+            
         else:
-            print("[DEBUG] Search failed - trying fallback")
-            progress_callback(task_id, 40, "Search failed, trying alternative approach...")
+            print("[ERROR] ❌ Search completely failed")
+            progress_callback(task_id, 45, "Search failed - no results found")
             
     except Exception as e:
-        print(f"[DEBUG] Scraping failed: {e}")
+        print(f"[ERROR] ❌ Scraping failed: {e}")
         import traceback
         traceback.print_exc()
         progress_callback(task_id, 80, f"Error: {str(e)}")
         
-        # Return error result
         return {
             'filename': f"failed_{task_id}",
             'total_records': 0,
@@ -241,125 +247,190 @@ async def scrape_googlemaps(request: ScrapeRequest, progress_callback: Callable,
         if driver:
             try:
                 driver.quit()
+                print("[DEBUG] 🔒 Browser closed")
             except:
                 pass
     
-    print(f"[DEBUG] Google Maps scraping completed: {len(results)} unique businesses")
-    
     # Export results
-    progress_callback(task_id, 90, "Exporting...")
+    progress_callback(task_id, 90, "Exporting results...")
     timestamp = create_timestamp()
     filename = f"googlemaps_uae_{timestamp}"
     
-    if results:
+    if results and len(results) > 0:
         csv_path = export_to_csv([r.__dict__ for r in results], filename)
         excel_path = export_to_excel([r.__dict__ for r in results], filename)
+        print(f"[DEBUG] ✅ Exported {len(results)} records")
     else:
         csv_path = None
         excel_path = None
+        print("[DEBUG] ⚠️ No results to export")
     
-    progress_callback(task_id, 100, f"Completed! Found {len(results)} verified businesses")
+    progress_callback(task_id, 100, f"Completed! Found {len(results)} businesses")
     
     return {
         'filename': filename,
         'total_records': len(results),
         'csv_path': csv_path,
         'excel_path': excel_path,
-        'status': 'completed'
+        'status': 'completed' if len(results) > 0 else 'completed_no_results'
     }
 
-def perform_google_maps_search(driver, request):
-    """Perform Google Maps search"""
+def perform_enhanced_search(driver, request, progress_callback, task_id):
+    """Enhanced search with better error handling"""
     try:
-        # Find search box
-        search_box = WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located((By.ID, "searchboxinput"))
-        )
+        progress_callback(task_id, 40, "Finding search box...")
+        
+        # Multiple search box selectors
+        search_selectors = [
+            "#searchboxinput",
+            "input[aria-label*='Search']",
+            "input[placeholder*='Search']",
+            "input[data-value='Search']"
+        ]
+        
+        search_box = None
+        for selector in search_selectors:
+            try:
+                search_box = WebDriverWait(driver, 5).until(
+                    EC.presence_of_element_located((By.CSS_SELECTOR, selector))
+                )
+                print(f"[DEBUG] ✅ Found search box with selector: {selector}")
+                break
+            except:
+                continue
+        
+        if not search_box:
+            print("[ERROR] ❌ Could not find search box")
+            return False
         
         # Create search query
         search_term = request.search_term or "restaurants"
         location = request.location or "Dubai, UAE"
         search_query = f"{search_term} in {location}"
         
-        print(f"[DEBUG] Searching for: {search_query}")
+        print(f"[DEBUG] 🔍 Searching for: {search_query}")
+        progress_callback(task_id, 42, f"Searching: {search_query}")
         
         # Perform search
         search_box.clear()
+        time.sleep(1)
         search_box.send_keys(search_query)
+        time.sleep(2)
         search_box.send_keys(Keys.RETURN)
         
-        # Wait for results to load
-        time.sleep(5)
+        # Wait for results
+        progress_callback(task_id, 45, "Waiting for results...")
+        time.sleep(10)  # Longer wait for cloud
         
         # Check if results loaded
-        try:
-            results_container = WebDriverWait(driver, 10).until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, "[role='main']"))
-            )
-            print(f"[DEBUG] Search results loaded successfully")
-            return True
-        except TimeoutException:
-            print(f"[DEBUG] Search results did not load")
+        result_indicators = [
+            "[role='main']",
+            ".Nv2PK",
+            "[data-result-index]",
+            ".hfpxzc"
+        ]
+        
+        results_found = False
+        for indicator in result_indicators:
+            try:
+                results_container = driver.find_elements(By.CSS_SELECTOR, indicator)
+                if results_container and len(results_container) > 0:
+                    print(f"[DEBUG] ✅ Results found with selector: {indicator}")
+                    results_found = True
+                    break
+            except:
+                continue
+        
+        if not results_found:
+            print("[ERROR] ❌ No search results found")
+            # Take screenshot for debugging
+            try:
+                driver.save_screenshot("/tmp/failed_search.png")
+                print("[DEBUG] 📸 Screenshot saved for debugging")
+            except:
+                pass
             return False
-            
+        
+        print("[DEBUG] ✅ Search completed successfully")
+        return True
+        
     except Exception as e:
-        print(f"[DEBUG] Search failed: {e}")
+        print(f"[ERROR] ❌ Search failed: {e}")
         return False
 
-def extract_google_maps_results(driver, progress_callback, task_id, seen_businesses, max_pages):
-    """Extract business data from Google Maps results"""
+def extract_google_maps_results_enhanced(driver, progress_callback, task_id, seen_businesses, max_pages):
+    """Enhanced extraction with better error handling"""
     results = []
-    processed_count = 0
     
     try:
-        # Wait for results to load
-        time.sleep(3)
+        progress_callback(task_id, 55, "Loading business listings...")
+        time.sleep(5)
         
-        # Scroll to load more results
-        for page in range(max_pages):
-            progress_callback(task_id, 50 + (page * 30) // max_pages, f"Loading page {page + 1}...")
-            
-            # Scroll down to load more results
-            scroll_results_panel(driver)
-            time.sleep(2)
+        # Enhanced element selectors
+        business_selectors = [
+            "[data-result-index]",
+            ".hfpxzc",
+            ".Nv2PK .qBF1Pd",
+            "[jsaction*='mouseover']",
+            ".bfdHYd"
+        ]
         
-        # Find all business listings
-        business_elements = driver.find_elements(By.CSS_SELECTOR, "[data-result-index], .hfpxzc, [jsaction*='mouseover']")
-        print(f"[DEBUG] Found {len(business_elements)} potential business elements")
-        
-        # Filter unique business elements
-        unique_elements = filter_unique_map_elements(business_elements)
-        print(f"[DEBUG] Processing {len(unique_elements)} unique business elements")
-        
-        for i, element in enumerate(unique_elements[:50]):  # Limit to 50 businesses
+        all_elements = []
+        for selector in business_selectors:
             try:
-                progress_val = 60 + (i * 30) // len(unique_elements)
-                progress_callback(task_id, progress_val, f"Processing business {i+1}/{len(unique_elements)} (extracting emails)")
+                elements = driver.find_elements(By.CSS_SELECTOR, selector)
+                all_elements.extend(elements)
+                print(f"[DEBUG] Found {len(elements)} elements with selector: {selector}")
+            except Exception as e:
+                print(f"[DEBUG] Selector failed {selector}: {e}")
+                continue
+        
+        print(f"[DEBUG] 📋 Total elements found: {len(all_elements)}")
+        
+        if len(all_elements) == 0:
+            print("[ERROR] ❌ No business elements found")
+            # Take debug screenshot
+            try:
+                driver.save_screenshot("/tmp/no_results.png")
+                current_url = driver.current_url
+                page_source_snippet = driver.page_source[:500]
+                print(f"[DEBUG] Current URL: {current_url}")
+                print(f"[DEBUG] Page source snippet: {page_source_snippet}")
+            except:
+                pass
+            return results
+        
+        # Filter unique elements
+        unique_elements = filter_unique_map_elements(all_elements)
+        print(f"[DEBUG] 🎯 Unique business elements: {len(unique_elements)}")
+        
+        # Process each business
+        for i, element in enumerate(unique_elements[:20]):  # Limit to 20 for cloud
+            try:
+                progress_val = 60 + (i * 25) // len(unique_elements)
+                progress_callback(task_id, progress_val, f"Processing business {i+1}/{len(unique_elements)}")
                 
                 business_data = extract_google_maps_business_data(element, driver)
                 
                 if business_data and business_data.business_name:
-                    # Create unique key for duplicate detection
                     business_key = create_business_key(business_data)
                     
                     if business_key not in seen_businesses:
                         seen_businesses.add(business_key)
                         results.append(business_data)
-                        processed_count += 1
-                        print(f"[DEBUG] ✅ NEW: {business_data.business_name}")
-                        print(f"[DEBUG] 📞 Phone: {business_data.mobile} | 🌐 Website: {business_data.website}")
-                        print(f"[DEBUG] 📧 Email: {business_data.email} | 📍 Location: {business_data.location}")
-                        print(f"[DEBUG] ⭐ Rating: {business_data.category}")
+                        print(f"[DEBUG] ✅ #{len(results)}: {business_data.business_name}")
+                        print(f"[DEBUG]    📞 {business_data.mobile} | 🌐 {business_data.website}")
                     else:
-                        print(f"[DEBUG] ❌ DUPLICATE SKIPPED: {business_data.business_name}")
+                        print(f"[DEBUG] ❌ DUPLICATE: {business_data.business_name}")
                 
             except Exception as e:
-                print(f"[DEBUG] Failed to extract business {i+1}: {e}")
+                print(f"[DEBUG] Failed to process business {i+1}: {e}")
                 continue
                 
     except Exception as e:
-        print(f"[DEBUG] Results extraction failed: {e}")
+        print(f"[ERROR] ❌ Results extraction failed: {e}")
     
+    print(f"[DEBUG] 🎉 Extraction completed: {len(results)} unique businesses")
     return results
 
 def scroll_results_panel(driver):
