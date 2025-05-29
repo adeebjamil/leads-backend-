@@ -127,25 +127,33 @@ async def scrape_googlemaps(request: ScrapeRequest, progress_callback: Callable,
     
     # Try to find Chrome binary
     import shutil
+    import os
+
     chrome_paths = [
+        "/usr/bin/google-chrome-stable",  # Docker primary
         "/usr/bin/google-chrome",
-        "/usr/bin/google-chrome-stable", 
         "/usr/bin/chromium-browser",
         "/usr/bin/chromium",
         "/opt/google/chrome/chrome"
     ]
     
+    # Also check environment variables
+    if os.environ.get('CHROME_BIN'):
+        chrome_paths.insert(0, os.environ.get('CHROME_BIN'))
+
     chrome_binary = None
     for path in chrome_paths:
-        if shutil.which(path):
+        if shutil.which(path) or os.path.exists(path):
             chrome_binary = path
             break
-    
+
     if chrome_binary:
         chrome_options.binary_location = chrome_binary
         print(f"[DEBUG] ✅ Found Chrome at: {chrome_binary}")
     else:
         print("[ERROR] ❌ Chrome binary not found")
+        print(f"[DEBUG] Checked paths: {chrome_paths}")
+        print(f"[DEBUG] CHROME_BIN env: {os.environ.get('CHROME_BIN', 'Not set')}")
         progress_callback(task_id, 0, "Error: Chrome not available")
         return {
             'filename': f"failed_{task_id}",
