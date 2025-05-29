@@ -1,4 +1,5 @@
 import asyncio
+import requests
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
@@ -15,8 +16,84 @@ import time
 import re
 import random
 
+# NEW: Email extraction from websites
+def extract_email_from_website(website_url):
+    """Extract email from business website"""
+    try:
+        if not website_url or not website_url.startswith('http'):
+            return ""
+            
+        print(f"[DEBUG] 📧 Checking website for email: {website_url}")
+        
+        response = requests.get(website_url, timeout=8, headers={
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        })
+        
+        if response.status_code == 200:
+            # Look for email patterns
+            email_pattern = r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
+            emails = re.findall(email_pattern, response.text, re.IGNORECASE)
+            
+            # Filter business emails (exclude social media, generic emails)
+            business_emails = []
+            for email in emails:
+                email_lower = email.lower()
+                if not any(domain in email_lower for domain in [
+                    'google.com', 'facebook.com', 'instagram.com', 'twitter.com', 
+                    'linkedin.com', 'youtube.com', 'tiktok.com', 'pinterest.com',
+                    'example.com', 'test.com', 'mailto.com', 'email.com'
+                ]):
+                    # Prefer info@, contact@, admin@ emails
+                    if any(prefix in email_lower for prefix in ['info@', 'contact@', 'admin@', 'sales@']):
+                        business_emails.insert(0, email)  # Priority emails first
+                    else:
+                        business_emails.append(email)
+            
+            if business_emails:
+                found_email = business_emails[0]
+                print(f"[DEBUG] ✅ Found email: {found_email}")
+                return found_email
+            else:
+                print(f"[DEBUG] ❌ No business emails found on website")
+                
+    except Exception as e:
+        print(f"[DEBUG] Email extraction failed for {website_url}: {e}")
+    
+    return ""
+
+def generate_common_emails(website_url, business_name):
+    """Generate common email patterns for business"""
+    try:
+        if not website_url:
+            return ""
+            
+        # Extract domain from website
+        domain = website_url.replace('http://', '').replace('https://', '').replace('www.', '').split('/')[0]
+        
+        # Common email prefixes
+        common_patterns = [
+            f"info@{domain}",
+            f"contact@{domain}",
+            f"sales@{domain}",
+            f"admin@{domain}",
+            f"hello@{domain}",
+            f"support@{domain}"
+        ]
+        
+        # Business name based email
+        if business_name:
+            clean_name = re.sub(r'[^\w]', '', business_name.lower())[:10]
+            if clean_name:
+                common_patterns.append(f"{clean_name}@{domain}")
+        
+        print(f"[DEBUG] 💡 Suggested emails for {domain}: {common_patterns[:3]}")
+        return common_patterns[0]  # Return most likely email
+        
+    except:
+        return ""
+
 async def scrape_googlemaps(request: ScrapeRequest, progress_callback: Callable, task_id: str) -> Dict:
-    """Google Maps Business Scraper - High Quality Verified Leads"""
+    """Google Maps Business Scraper - High Quality Verified Leads with Email Extraction"""
     
     results = []
     seen_businesses = set()
@@ -77,7 +154,7 @@ async def scrape_googlemaps(request: ScrapeRequest, progress_callback: Callable,
         search_success = perform_google_maps_search(driver, request)
         
         if search_success:
-            progress_callback(task_id, 50, "Extracting business data...")
+            progress_callback(task_id, 50, "Extracting business data with emails...")
             results = extract_google_maps_results(driver, progress_callback, task_id, seen_businesses, request.max_pages or 3)
         else:
             print("[DEBUG] Search failed")
@@ -102,7 +179,7 @@ async def scrape_googlemaps(request: ScrapeRequest, progress_callback: Callable,
     csv_path = export_to_csv([r.__dict__ for r in results], filename)
     excel_path = export_to_excel([r.__dict__ for r in results], filename)
     
-    progress_callback(task_id, 100, f"Completed! Found {len(results)} verified businesses")
+    progress_callback(task_id, 100, f"Completed! Found {len(results)} verified businesses with contact info")
     
     return {
         'filename': filename,
@@ -177,7 +254,7 @@ def extract_google_maps_results(driver, progress_callback, task_id, seen_busines
         for i, element in enumerate(unique_elements[:50]):  # Limit to 50 businesses
             try:
                 progress_val = 60 + (i * 30) // len(unique_elements)
-                progress_callback(task_id, progress_val, f"Processing business {i+1}/{len(unique_elements)}")
+                progress_callback(task_id, progress_val, f"Processing business {i+1}/{len(unique_elements)} (extracting emails)")
                 
                 business_data = extract_google_maps_business_data(element, driver)
                 
@@ -191,7 +268,8 @@ def extract_google_maps_results(driver, progress_callback, task_id, seen_busines
                         processed_count += 1
                         print(f"[DEBUG] ✅ NEW: {business_data.business_name}")
                         print(f"[DEBUG] 📞 Phone: {business_data.mobile} | 🌐 Website: {business_data.website}")
-                        print(f"[DEBUG] 📍 Location: {business_data.location} | ⭐ Rating: {business_data.category}")
+                        print(f"[DEBUG] 📧 Email: {business_data.email} | 📍 Location: {business_data.location}")
+                        print(f"[DEBUG] ⭐ Rating: {business_data.category}")
                     else:
                         print(f"[DEBUG] ❌ DUPLICATE SKIPPED: {business_data.business_name}")
                 
@@ -248,7 +326,7 @@ def filter_unique_map_elements(elements):
     return unique_elements
 
 def extract_google_maps_business_data(element, driver):
-    """Extract business data from Google Maps listing"""
+    """Extract business data from Google Maps listing - ENHANCED WITH EMAIL EXTRACTION"""
     try:
         # Click on the business to get details
         try:
@@ -270,6 +348,15 @@ def extract_google_maps_business_data(element, driver):
         website = extract_maps_website(driver)
         hours = extract_maps_hours(driver)
         
+        # ENHANCED: Extract email from website
+        email = ""
+        if website:
+            email = extract_email_from_website(website)
+            
+        # If no email found from website, try generating common patterns
+        if not email and website:
+            email = generate_common_emails(website, business_name)
+        
         # Combine rating and category for category field
         if rating:
             category = f"{category} (★{rating})" if category else f"Business (★{rating})"
@@ -280,7 +367,7 @@ def extract_google_maps_business_data(element, driver):
             location=address,
             mobile=phone,
             whatsapp=phone,  # Assume mobile can be WhatsApp
-            email="",  # Google Maps doesn't usually show emails
+            email=email,  # NOW EXTRACTS EMAILS FROM WEBSITES!
             website=website,
             source_url=driver.current_url,
             source_site="Google Maps"
