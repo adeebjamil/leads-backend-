@@ -359,56 +359,124 @@ def perform_enhanced_search(driver, request, progress_callback, task_id):
         return False
 
 def extract_google_maps_results_enhanced(driver, progress_callback, task_id, seen_businesses, max_pages):
-    """Enhanced extraction with better error handling"""
+    """Enhanced extraction with better error handling and DETAILED LOGGING"""
     results = []
     
     try:
         progress_callback(task_id, 55, "Loading business listings...")
+        print(f"[DEBUG] 🔍 Starting business extraction for task {task_id}")
         time.sleep(5)
         
-        # Enhanced element selectors
+        # ENHANCED: Take screenshot for debugging
+        try:
+            screenshot_path = f"/tmp/search_results_{task_id}.png"
+            driver.save_screenshot(screenshot_path)
+            print(f"[DEBUG] 📸 Screenshot saved: {screenshot_path}")
+        except Exception as e:
+            print(f"[DEBUG] Screenshot failed: {e}")
+        
+        # Log current page info
+        current_url = driver.current_url
+        page_title = driver.title
+        print(f"[DEBUG] 📄 Current URL: {current_url}")
+        print(f"[DEBUG] 📄 Page title: {page_title}")
+        
+        # Enhanced element selectors with more options
         business_selectors = [
+            # Primary Google Maps selectors
             "[data-result-index]",
             ".hfpxzc",
+            # Alternative selectors
             ".Nv2PK .qBF1Pd",
             "[jsaction*='mouseover']",
-            ".bfdHYd"
+            ".bfdHYd",
+            # Backup selectors
+            "div[role='article']",
+            ".lI9IFe",
+            "[data-index]",
+            "a[data-cid]"
         ]
         
         all_elements = []
         for selector in business_selectors:
             try:
                 elements = driver.find_elements(By.CSS_SELECTOR, selector)
-                all_elements.extend(elements)
-                print(f"[DEBUG] Found {len(elements)} elements with selector: {selector}")
+                if elements:
+                    all_elements.extend(elements)
+                    print(f"[DEBUG] ✅ Found {len(elements)} elements with selector: {selector}")
+                else:
+                    print(f"[DEBUG] ❌ No elements found with selector: {selector}")
             except Exception as e:
-                print(f"[DEBUG] Selector failed {selector}: {e}")
+                print(f"[DEBUG] ❌ Selector failed {selector}: {e}")
                 continue
         
         print(f"[DEBUG] 📋 Total elements found: {len(all_elements)}")
         
+        # If no elements found, try alternative approach
         if len(all_elements) == 0:
-            print("[ERROR] ❌ No business elements found")
-            # Take debug screenshot
+            print("[ERROR] ❌ No business elements found with primary selectors")
+            
+            # Try to find ANY clickable elements
             try:
-                driver.save_screenshot("/tmp/no_results.png")
-                current_url = driver.current_url
-                page_source_snippet = driver.page_source[:500]
-                print(f"[DEBUG] Current URL: {current_url}")
-                print(f"[DEBUG] Page source snippet: {page_source_snippet}")
-            except:
-                pass
-            return results
+                all_clickable = driver.find_elements(By.CSS_SELECTOR, "a, button, div[role='button']")
+                print(f"[DEBUG] 🔍 Found {len(all_clickable)} total clickable elements")
+                
+                # Look for elements with business-like text
+                business_like = []
+                for elem in all_clickable[:50]:  # Check first 50
+                    try:
+                        text = elem.text.strip()
+                        if text and len(text) > 5:
+                            # Check if text looks like a business
+                            if any(indicator in text.lower() for indicator in 
+                                  ['restaurant', 'cafe', 'shop', 'store', 'hotel', 'rating', '★', 'open', 'closed']):
+                                business_like.append(elem)
+                                print(f"[DEBUG] 🏢 Found business-like element: {text[:50]}...")
+                    except:
+                        continue
+                
+                if business_like:
+                    all_elements = business_like
+                    print(f"[DEBUG] 🎯 Using {len(business_like)} business-like elements")
+                    
+            except Exception as e:
+                print(f"[DEBUG] Alternative search failed: {e}")
+            
+            # Still no results - log page source for debugging
+            if len(all_elements) == 0:
+                try:
+                    page_source_snippet = driver.page_source[:2000]
+                    print(f"[DEBUG] 📝 Page source snippet:")
+                    print(page_source_snippet)
+                    print("[DEBUG] 📝 End of page source snippet")
+                except:
+                    pass
+                
+                return results
         
         # Filter unique elements
         unique_elements = filter_unique_map_elements(all_elements)
-        print(f"[DEBUG] 🎯 Unique business elements: {len(unique_elements)}")
+        print(f"[DEBUG] 🎯 Unique business elements after filtering: {len(unique_elements)}")
         
-        # Process each business
+        if len(unique_elements) == 0:
+            print("[ERROR] ❌ No unique business elements after filtering")
+            return results
+        
+        # Process each business with detailed logging
+        processed_count = 0
         for i, element in enumerate(unique_elements[:20]):  # Limit to 20 for cloud
             try:
                 progress_val = 60 + (i * 25) // len(unique_elements)
                 progress_callback(task_id, progress_val, f"Processing business {i+1}/{len(unique_elements)}")
+                
+                print(f"[DEBUG] 🔄 Processing element {i+1}/{len(unique_elements)}")
+                
+                # Try to get element text first
+                try:
+                    element_text = element.text.strip()
+                    print(f"[DEBUG] 📝 Element text: {element_text[:100]}...")
+                except:
+                    print(f"[DEBUG] ❌ Could not get element text")
                 
                 business_data = extract_google_maps_business_data(element, driver)
                 
@@ -418,17 +486,33 @@ def extract_google_maps_results_enhanced(driver, progress_callback, task_id, see
                     if business_key not in seen_businesses:
                         seen_businesses.add(business_key)
                         results.append(business_data)
+                        processed_count += 1
                         print(f"[DEBUG] ✅ #{len(results)}: {business_data.business_name}")
-                        print(f"[DEBUG]    📞 {business_data.mobile} | 🌐 {business_data.website}")
+                        print(f"[DEBUG]    📍 {business_data.location}")
+                        print(f"[DEBUG]    📞 {business_data.mobile}")
+                        print(f"[DEBUG]    🌐 {business_data.website}")
+                        print(f"[DEBUG]    📧 {business_data.email}")
                     else:
                         print(f"[DEBUG] ❌ DUPLICATE: {business_data.business_name}")
+                else:
+                    print(f"[DEBUG] ❌ No business data extracted from element {i+1}")
                 
             except Exception as e:
-                print(f"[DEBUG] Failed to process business {i+1}: {e}")
+                print(f"[DEBUG] ❌ Failed to process business {i+1}: {e}")
+                import traceback
+                traceback.print_exc()
                 continue
+                
+        print(f"[DEBUG] 📊 Processing complete:")
+        print(f"[DEBUG]   - Elements found: {len(all_elements)}")
+        print(f"[DEBUG]   - Unique elements: {len(unique_elements)}")
+        print(f"[DEBUG]   - Successfully processed: {processed_count}")
+        print(f"[DEBUG]   - Final results: {len(results)}")
                 
     except Exception as e:
         print(f"[ERROR] ❌ Results extraction failed: {e}")
+        import traceback
+        traceback.print_exc()
     
     print(f"[DEBUG] 🎉 Extraction completed: {len(results)} unique businesses")
     return results
