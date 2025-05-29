@@ -136,6 +136,22 @@ async def download_file(filename: str, file_type: str = "csv"):
         headers={"Content-Disposition": f"attachment; filename={filename}.{file_extension}"}
     )
 
+@app.get("/debug/stats")
+async def debug_stats():
+    """Debug endpoint to check statistics"""
+    tasks = scraper_manager.get_all_tasks()
+    daily_stats = scraper_manager.get_daily_stats()
+    today_summary = scraper_manager.get_today_summary()
+    
+    return {
+        "tasks": tasks,
+        "daily_stats": daily_stats,
+        "today_summary": today_summary,
+        "tasks_count": len(tasks),
+        "completed_tasks": [t for t in tasks if t['status'] == 'completed'],
+        "total_records_from_tasks": sum(t.get('total_records', 0) for t in tasks if t['status'] == 'completed')
+    }
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)

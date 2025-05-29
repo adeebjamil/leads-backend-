@@ -93,7 +93,7 @@ def generate_common_emails(website_url, business_name):
         return ""
 
 async def scrape_googlemaps(request: ScrapeRequest, progress_callback: Callable, task_id: str) -> Dict:
-    """Google Maps Business Scraper - High Quality Verified Leads with Email Extraction"""
+    """Google Maps Business Scraper - FIXED RETURN FORMAT"""
     
     results = []
     seen_businesses = set()
@@ -169,6 +169,10 @@ async def scrape_googlemaps(request: ScrapeRequest, progress_callback: Callable,
         if driver:
             driver.quit()
     
+    # Example results for testing - REMOVE THIS IN PRODUCTION
+    if not results:  # If no results found, add some test data
+        print("[DEBUG] No results found, this might be a cloud environment issue")
+        
     print(f"[DEBUG] Google Maps scraping completed: {len(results)} unique businesses")
     
     # Export results
@@ -176,16 +180,22 @@ async def scrape_googlemaps(request: ScrapeRequest, progress_callback: Callable,
     timestamp = create_timestamp()
     filename = f"googlemaps_uae_{timestamp}"
     
-    csv_path = export_to_csv([r.__dict__ for r in results], filename)
-    excel_path = export_to_excel([r.__dict__ for r in results], filename)
+    if results:
+        csv_path = export_to_csv([r.__dict__ for r in results], filename)
+        excel_path = export_to_excel([r.__dict__ for r in results], filename)
+    else:
+        csv_path = None
+        excel_path = None
     
-    progress_callback(task_id, 100, f"Completed! Found {len(results)} verified businesses with contact info")
+    progress_callback(task_id, 100, f"Completed! Found {len(results)} verified businesses")
     
+    # FIXED: Return proper format
     return {
         'filename': filename,
-        'total_records': len(results),
+        'total_records': len(results),  # This is crucial!
         'csv_path': csv_path,
-        'excel_path': excel_path
+        'excel_path': excel_path,
+        'status': 'completed'
     }
 
 def perform_google_maps_search(driver, request):
