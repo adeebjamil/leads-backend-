@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: uae-business-scraper-backend
+    env: docker
+    buildCommand: ""
+    startCommand: ""
+    envVars:
+      - key: PORT
+        value: "8000"
+      - key: CHROME_BIN
+        value: "/usr/bin/google-chrome-stable"
+      - key: CHROMEDRIVER_PATH
+        value: "/usr/local/bin/chromedriver"
+      - key: DISPLAY
+        value: ":99"
+    healthCheckPath: "/"
